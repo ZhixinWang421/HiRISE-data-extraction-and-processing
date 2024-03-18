@@ -1,0 +1,77 @@
+%%Input two endpoints
+sampleA=input('Please input sampleA:');
+lineA=input('Please input lineA:');
+sampleB=input('Please input sampleB:');
+lineB=input('Please input lineB:');
+
+tiff_file= 'DTEEC_001546_2015_001955_2015_U01.tiff';
+JP2_file='PSP_001546_2015_RED_C_01_ORTHO.JP2';
+
+%% Read the JP2 file
+I = imread(JP2_file);
+
+%% Reading tiff files 
+[Z, R] = geotiffread(tiff_file);
+
+%% Converts geographic coordinates to pixel coordinates
+[rowA, colA] = map2pix(R, sampleA, lineA);
+[rowB, colB] = map2pix(R, sampleB, lineB);
+
+d = sqrt((rowB - rowA)^2 + (colB - colA)^2);
+dx=rowB-rowA;
+dy=colB-colA;
+n = max(abs(dx), abs(dy)) + 1;
+delta=d/(n+1);
+for i = 1:n
+sample=rowA+(i-1)*(dx/(n-1));
+line=colA+(i-1)*(dy/(n-1));
+%% Store the coordinates of the point in the array
+points(i,:) = [round(sample), round(line)];
+end
+
+
+% Display the JP2 image
+imshow(I);
+
+% Add markers for the first and last points
+hold on;
+for i=1:n
+plot(points(i, 2), points(i, 1), 'ro', 'MarkerSize', 5); % Red marker for the first point
+end
+hold off;
+
+%% Loop through each point in the points array
+f=figure;
+for i = 1:n
+%%Gets the sample and line values for the current point 
+row = points(i, 1);
+col = points(i, 2);
+
+%% Call the latlon2elevation function to get the elevation value, gray value, latitude and longitude of the point 
+[elevation, gray_val] = latlon2elevation(row, col,Z,I, 'test1209.txt');
+% Add markers for the first and last points
+hold on;
+l=elevation;
+d=sqrt(row^2+col^2);
+plot(col, l, 'ro', 'MarkerSize', 5); % Red marker for the first point
+hold off;
+end
+
+function [elevation, gray_val] = latlon2elevation(row, col,Z,I, txt_file)
+
+%% Gets the elevation value
+elevation = Z(round(row), round(col));
+
+%% Gets the grayscale value of the specified pixel position
+gray_val = I(round(row), round(col)) ;
+%% Displays geographic coordinates and elevation values
+disp(['(' num2str(row) ',' num2str(col) ') The elevation value is ' num2str(elevation)]);
+disp(['(' num2str(row) ',' num2str(col) ') The gray value is ' num2str(gray_val)]);
+
+%% Save to a text document
+data1 = elevation;
+data2 = gray_val;
+fid = fopen(txt_file, 'a'); %% Opens a text document in append mode
+fprintf(fid, '%d %d %d %d\n', row,col,data1,data2');
+fclose(fid);
+end

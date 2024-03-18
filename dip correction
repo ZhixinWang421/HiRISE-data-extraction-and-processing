@@ -1,0 +1,76 @@
+filename='arabia1.txt';
+data=load(filename);
+x=data(:,2);
+y=data(:,1);
+z=data(:,3);
+gray_scale=data(:,4);
+
+% Create a matrix A with columns 'x' and 'y'
+A = [x, y, ones(size(x))];
+
+% Use linear regression to find coefficients 'a' and 'b'
+coefficients = A\z;
+
+% Extract 'a' and 'b' from the coefficients vector
+a = coefficients(1);
+b = coefficients(2);
+c = coefficients(3);
+
+% 计算平面法向量
+normal_vector = [coefficients(1), coefficients(2), -1];
+
+% 标准化法向量为单位向量
+normal_vector = normal_vector / norm(normal_vector);
+
+% 计算地层倾向角度
+strike_angle_deg = atan2(normal_vector(2), normal_vector(1));
+strike_angle_deg = rad2deg(strike_angle_deg);
+
+tanp=sqrt(a*a+b*b);
+p=atan(tanp);
+p=rad2deg(p);
+tan_theta_plus_pi=b/a;
+
+dip=input('dip:');
+dip=deg2rad(dip);
+sin_dip=sin(dip);
+cos_dip=cos(dip);
+tan_dip=tan(dip);
+dip=rad2deg(dip);
+
+theta=input('theta:');
+theta=deg2rad(theta);
+sin_theta=sin(theta);
+cos_theta=cos(theta);
+theta=rad2deg(theta);
+
+%% force x min and y min to 0, get x,y,z,gray
+y = data(:,1) - min(data(:,1));
+x = data(:,2) - min(data(:,2));
+z = data(:,3);
+gray = data(:,4);
+
+%% deal z
+z=-z;
+z = z - min(z);
+
+%% flip y
+y = flipud(y); 
+
+d=tan_dip*cos_theta*y*1.0114702161842+tan_dip*sin_theta*x*1.0114702161842+z;
+t=diff(d)*cos_dip;
+
+deep=zeros(1,length(t));
+for i=1:length(t)
+deep(i)=sum(t(1:i));
+end
+deep=-deep';
+gray_scale=gray_scale(1:end-1);
+dat = [deep,gray_scale]; % output
+
+dat=sortrows(dat,1);
+
+figure
+plot(dat(:,1),dat(:,2));
+title('real-gray')
+dlmwrite('deal.txt', dat, 'delimiter', ' ', 'precision', 8);

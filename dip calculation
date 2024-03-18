@@ -1,0 +1,140 @@
+clear;
+
+jp2File = 'ESP_076460_1910_RED_C_01_ORTHO.JP2';
+tiff_file= 'DTEED_076671_1910_076460_1910_A01.tiff';
+I=imread(jp2File);
+filename='try.txt';
+fid=fopen(filename,'w');
+fclose(fid);
+% 使用 imtool 查看、放大/缩小图像并选取点
+h = imtool(I);
+disp('请在 imtool 窗口中放大/缩小图像并选取点，然后在命令窗口中按 Enter 继续。');
+pause; % 等待用户在命令窗口按下 Enter
+
+% 从 imtool 窗口中获取用户选取的点
+[x, y] = getpts(h);
+
+% 关闭 imtool 窗口
+close all;
+
+% 创建一个新图像显示窗口并绘制图像
+figure;
+imshow(I);
+hold on;
+
+% 计算并绘制每条线段
+for i = 1:length(x) - 1
+lineCoords = [x,y];
+% 显示线段
+plot(lineCoords(:, 1), lineCoords(:, 2), 'r-');
+
+end
+% 输出坐标
+disp(lineCoords);
+hold off;
+
+%% Reading tiff files 
+[Z, R] = geotiffread(tiff_file);
+
+n=size(lineCoords,1);
+
+for i = 1:n
+%%Gets the sample and line values for the current point 
+col = lineCoords(i, 1);
+row = lineCoords(i, 2);
+
+%% Call the latlon2elevation function to get the elevation value, gray value, latitude and longitude of the point 
+[elevation, gray_val] = latlon2elevation(row, col,Z,I, filename);
+end
+data=load(filename);
+x=data(:,2);
+y=data(:,1);
+z=data(:,3);
+
+% Create a matrix A with columns 'x' and 'y'
+A = [x, y, ones(size(x))];
+
+% Use linear regression to find coefficients 'a' and 'b'
+coefficients = A\z;
+
+% Extract 'a' and 'b' from the coefficients vector
+a = coefficients(1);
+b = coefficients(2);
+c = coefficients(3);
+
+% 计算平面法向量
+normal_vector = [coefficients(1), coefficients(2), -1];
+
+% 标准化法向量为单位向量
+normal_vector = normal_vector / norm(normal_vector);
+
+% 计算地层倾向角度
+strike_angle_deg = atan2(normal_vector(2), normal_vector(1));
+strike_angle_deg = rad2deg(strike_angle_deg);
+
+%dip
+tan_dip=sqrt(a*a+b*b);
+dip=atan(tan_dip);
+dip=rad2deg(dip);
+fprintf('dip:%.6f\n',dip);
+tan_theta_plus_pi=b/a;
+theta=atan(tan_theta_plus_pi);
+theta=rad2deg(theta)+180;
+fprintf('theta:%f\n',theta);
+
+% 组合成矩阵
+XYZ = [x y z];
+
+% 计算最优拟合平面
+% 构建设计矩阵
+D = [x y ones(size(x))];
+
+% 最小二乘法求解
+beta = (D'*D) \ (D'*z);
+
+% 平面方程为 ax + by + cz + d = 0
+a = beta(1);
+b = beta(2);
+c = -1;
+d = beta(3);
+
+% 计算平面的法向量
+normal = [a b c];
+
+% 计算平面倾角（与z轴的夹角）
+angle = acosd(abs(c) / norm(normal));
+
+% 显示结果
+fprintf('平面方程: %fx + %fy + z + %f = 0\n', a, b, d);
+fprintf('平面的倾角: %f 度\n', angle);
+fprintf('strike:%f\n',strike_angle_deg);
+
+% 可视化
+figure;
+scatter3(x, y, z, 'filled');
+hold on;
+[X, Y] = meshgrid(linspace(min(x), max(x), 10), linspace(min(y), max(y), 10));
+Z = -(a*X + b*Y + d)/c;
+surf(X, Y, Z, 'FaceAlpha', 0.3);
+xlabel('X');
+ylabel('Y');
+zlabel('Z');
+
+function [elevation, gray_val] = latlon2elevation(row, col,Z,I, txt_file)
+
+%% Gets the elevation value
+elevation = Z(round(row), round(col));
+
+%% Gets the grayscale value of the specified pixel position
+gray_val = I(round(row), round(col)) ;
+%% Displays geographic coordinates and elevation values
+disp(['(' num2str(row) ',' num2str(col) ') The elevation value is ' num2str(elevation)]);
+%disp(['(' num2str(row) ',' num2str(col) ') The gray value is ' num2str(gray_val)]);
+
+%% Save to a text document
+data1 = elevation;
+data2 = gray_val;
+fid = fopen(txt_file, 'a'); %% Opens a text document in append mode
+fprintf(fid, '%d %d %d %d\n', row,col,data1,data2');
+fclose(fid);
+end
